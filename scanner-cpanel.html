@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Smart Scanner - dataeasy.web.id</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+  <style>
+    :root { --bg:#0b1220; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --ok:#10b981; --blue:#3b82f6; --rose:#f43f5e; --amber:#f59e0b; }
+    * { box-sizing:border-box; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--text); min-height:100vh; }
+    .wrap { max-width:520px; margin:0 auto; padding:12px; }
+    .card { background:var(--card); border:1px solid #1f2937; border-radius:16px; padding:16px; margin-bottom:12px; }
+    .title { font-weight:800; font-size:20px; margin:0 0 2px; letter-spacing:-0.3px; }
+    .sub { color:var(--muted); font-size:12px; margin:0 0 14px; line-height:1.4; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .btn { border:1px solid #334155; background:#1f2937; color:#fff; border-radius:12px; padding:12px 16px; cursor:pointer; font-weight:700; font-size:13px; transition:all 0.2s; }
+    .btn:active { transform:scale(0.96); }
+    .btn.primary { background:var(--ok); border-color:var(--ok); color:#052e1f; }
+    .btn.primary:hover { background:#059669; }
+    .btn.danger { background:var(--rose); border-color:var(--rose); color:#fff; }
+    .btn.active-auto { background:var(--ok); color:#052e1f; border-color:var(--ok); box-shadow:0 0 12px rgba(16,185,129,0.4); }
+    .btn.active-retur { background:var(--rose); color:#fff; border-color:var(--rose); box-shadow:0 0 12px rgba(244,63,94,0.4); }
+    .input { flex:1; min-width:140px; border:1px solid #334155; background:#0f172a; color:#fff; border-radius:12px; padding:12px; font-size:14px; font-weight:600; }
+    .input:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,0.2); }
+    #reader { width:100%; min-height:280px; background:#000; border-radius:12px; overflow:hidden; margin-bottom:12px; }
+    .hint { font-size:11px; color:var(--muted); margin-top:8px; line-height:1.5; }
+    .result-box { margin-top:12px; padding:12px; border-radius:12px; font-size:13px; word-break:break-all; font-weight:600; }
+    .result-ok { background:#052e1f; color:#86efac; border:1px solid #10b981; }
+    .result-err { background:#4c0519; color:#fda4af; border:1px solid #f43f5e; }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:8px; font-size:11px; font-weight:700; }
+    .badge-auto { background:#052e1f; color:#10b981; border:1px solid #10b981; }
+    .badge-retur { background:#4c0519; color:#f43f5e; border:1px solid #f43f5e; }
+    .mode-section { display:flex; gap:8px; margin-bottom:14px; }
+    .mode-section .btn { flex:1; text-align:center; padding:14px 8px; font-size:14px; }
+    .stats { display:flex; gap:8px; margin-top:12px; }
+    .stat-item { flex:1; background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:10px; text-align:center; }
+    .stat-num { font-size:22px; font-weight:800; color:#fff; }
+    .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
+    .retur-options { display:none; gap:8px; margin-top:10px; }
+    .retur-options.show { display:flex; }
+    .retur-btn { flex:1; padding:14px; border-radius:12px; border:2px solid #334155; background:#1f2937; color:#fff; font-weight:700; font-size:13px; cursor:pointer; text-align:center; transition:all 0.2s; }
+    .retur-btn:hover { border-color:#fff; }
+    .retur-btn.good { border-color:#10b981; color:#10b981; }
+    .retur-btn.good:hover { background:#10b981; color:#052e1f; }
+    .retur-btn.bad { border-color:#f43f5e; color:#f43f5e; }
+    .retur-btn.bad:hover { background:#f43f5e; color:#fff; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .scanning-indicator { animation:pulse 1.5s infinite; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- HEADER -->
+    <div class="card">
+      <h1 class="title">Smart Scanner</h1>
+      <p class="sub">Scan resi barcode untuk proses pengiriman otomatis. 1x scan = langsung dikirim + stok terpotong.</p>
+
+      <!-- MODE: AUTO vs RETUR -->
+      <div class="mode-section">
+        <button class="btn active-auto" id="btnAuto" onclick="setMode('AUTO')">AUTO (Kirim)</button>
+        <button class="btn" id="btnRetur" onclick="setMode('RETUR')">RETUR</button>
+      </div>
+
+      <!-- RETUR CONDITION (hidden by default) -->
+      <div class="retur-options" id="returOptions">
+        <button class="retur-btn good" id="btnGood" onclick="setReturCondition('GOOD')">Layak Jual (GOOD)</button>
+        <button class="retur-btn bad" id="btnBad" onclick="setReturCondition('BAD')">Rusak (BAD)</button>
+      </div>
+
+      <!-- KAMERA -->
+      <div class="row" style="margin-bottom:10px; margin-top:10px;">
+        <button id="startBtn" class="btn primary" onclick="startScanner()" style="flex:1;">Aktifkan Kamera</button>
+        <button class="btn" onclick="stopScanner()">Stop</button>
+      </div>
+
+      <div id="reader"></div>
+
+      <!-- MANUAL INPUT -->
+      <div class="row">
+        <input id="manualCode" class="input" placeholder="Ketik resi manual..." onkeydown="if(event.key==='Enter'){sendManual()}" />
+        <button class="btn primary" onclick="sendManual()">Proses</button>
+      </div>
+
+      <!-- RESULT -->
+      <div id="scanResult"></div>
+
+      <!-- STATS -->
+      <div class="stats">
+        <div class="stat-item">
+          <div class="stat-num" id="countSuccess">0</div>
+          <div class="stat-label">Berhasil</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num" id="countFail">0</div>
+          <div class="stat-label">Gagal</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num" id="countTotal">0</div>
+          <div class="stat-label">Total Scan</div>
+        </div>
+      </div>
+
+      <div class="hint" id="hintText"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // --- CONFIG ---
+    const params = new URLSearchParams(window.location.search);
+    let SCAN_MODE = String(params.get('mode') || 'AUTO').toUpperCase();
+    let RETUR_CONDITION = 'GOOD';
+    const SOURCE_ORIGIN = params.get('sourceOrigin') || '*';
+    const SCAN_CONTEXT = String(params.get('context') || 'EXPEDITION').toUpperCase();
+
+    // Jika context OPNAME, mode tidak relevan
+    const IS_OPNAME = (SCAN_CONTEXT === 'OPNAME');
+
+    let QR = null;
+    let scanning = false;
+    let lastCode = '';
+    let lastCodeTime = 0;
+    let stats = { success: 0, fail: 0, total: 0 };
+
+    // --- MODE SWITCHING ---
+    function setMode(mode) {
+      SCAN_MODE = mode;
+      const btnAuto = document.getElementById('btnAuto');
+      const btnRetur = document.getElementById('btnRetur');
+      const returOpts = document.getElementById('returOptions');
+
+      // Reset classes
+      btnAuto.className = 'btn';
+      btnRetur.className = 'btn';
+
+      if (mode === 'AUTO') {
+        btnAuto.className = 'btn active-auto';
+        returOpts.classList.remove('show');
+        updateHint('Mode AUTO aktif. 1x scan = langsung SHIPPED + stok terpotong.');
+      } else {
+        btnRetur.className = 'btn active-retur';
+        returOpts.classList.add('show');
+        updateHint('Mode RETUR aktif. Pilih kondisi barang, lalu scan resi.');
+      }
+    }
+
+    function setReturCondition(cond) {
+      RETUR_CONDITION = cond;
+      const btnGood = document.getElementById('btnGood');
+      const btnBad = document.getElementById('btnBad');
+
+      btnGood.style.background = cond === 'GOOD' ? '#10b981' : '#1f2937';
+      btnGood.style.color = cond === 'GOOD' ? '#052e1f' : '#10b981';
+      btnBad.style.background = cond === 'BAD' ? '#f43f5e' : '#1f2937';
+      btnBad.style.color = cond === 'BAD' ? '#fff' : '#f43f5e';
+
+      updateHint('Kondisi retur: ' + (cond === 'GOOD' ? 'Layak Jual (stok dikembalikan)' : 'Rusak (stok tetap)'));
+    }
+
+    function updateHint(text) {
+      document.getElementById('hintText').innerHTML = text;
+    }
+
+    function updateStats() {
+      document.getElementById('countSuccess').textContent = stats.success;
+      document.getElementById('countFail').textContent = stats.fail;
+      document.getElementById('countTotal').textContent = stats.total;
+    }
+
+    // --- SCANNER ---
+    async function startScanner() {
+      const btn = document.getElementById('startBtn');
+      btn.disabled = true;
+      btn.textContent = 'Memulai...';
+
+      try {
+        await stopScanner();
+
+        QR = new Html5Qrcode('reader', { verbose: false });
+        const config = {
+          fps: 15,
+          qrbox: { width: 280, height: 140 },
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+        };
+
+        try {
+          await QR.start({ facingMode: { exact: 'environment' } }, config, onSuccess, onFail);
+        } catch (e1) {
+          try {
+            await QR.start({ facingMode: 'environment' }, config, onSuccess, onFail);
+          } catch (e2) {
+            await QR.start({ facingMode: 'user' }, config, onSuccess, onFail);
+          }
+        }
+
+        scanning = true;
+        btn.textContent = 'Kamera Aktif';
+        btn.style.background = '#059669';
+      } catch (err) {
+        alert('Gagal membuka kamera: ' + (err?.message || err));
+        btn.textContent = 'Aktifkan Kamera';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function stopScanner() {
+      if (!QR) return;
+      try { await QR.stop(); } catch(e) {}
+      try { await QR.clear(); } catch(e) {}
+      QR = null;
+      scanning = false;
+      const btn = document.getElementById('startBtn');
+      btn.textContent = 'Aktifkan Kamera';
+      btn.style.background = '';
+    }
+
+    function onSuccess(decodedText) {
+      const code = String(decodedText || '').trim();
+      if (!code) return;
+
+      // Debounce: jangan proses kode yang sama dalam 3 detik
+      const now = Date.now();
+      if (code === lastCode && (now - lastCodeTime) < 3000) return;
+      lastCode = code;
+      lastCodeTime = now;
+
+      processCode(code);
+    }
+
+    function onFail() {}
+
+    function sendManual() {
+      const el = document.getElementById('manualCode');
+      const code = String(el.value || '').trim();
+      if (!code) return;
+      el.value = '';
+      processCode(code);
+    }
+
+    // --- PROCESS CODE ---
+    function processCode(code) {
+      // Jika context OPNAME, kirim ke parent saja (tidak proses backend)
+      if (IS_OPNAME) {
+        sendToParent(code);
+        return;
+      }
+
+      // Kirim ke parent window (GAS web app) via postMessage
+      sendToParent(code);
+
+      // Tampilkan feedback
+      const result = document.getElementById('scanResult');
+      const modeLabel = SCAN_MODE === 'RETUR' ? 'RETUR (' + RETUR_CONDITION + ')' : 'AUTO';
+      result.innerHTML = '<div class="result-box result-ok">Terkirim: ' + code + ' [' + modeLabel + ']</div>';
+
+      stats.total++;
+      stats.success++;
+      updateStats();
+    }
+
+    function sendToParent(code) {
+      const payload = {
+        type: 'DE_SCAN_RESULT',
+        code: code,
+        context: SCAN_CONTEXT,
+        mode: SCAN_MODE,
+        condition: SCAN_MODE === 'RETUR' ? RETUR_CONDITION : '',
+        sentAt: Date.now()
+      };
+
+      // Kirim ke parent (GAS web app)
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payload, SOURCE_ORIGIN === 'null' ? '*' : SOURCE_ORIGIN);
+      }
+    }
+
+    // --- INIT ---
+    function init() {
+      if (IS_OPNAME) {
+        // Sembunyikan mode buttons untuk opname
+        document.querySelector('.mode-section').style.display = 'none';
+        document.getElementById('returOptions').classList.remove('show');
+        updateHint('Context: <b>OPNAME</b>. Scan barcode untuk pencarian produk.');
+      } else {
+        setMode(SCAN_MODE);
+        setReturCondition(RETUR_CONDITION);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
